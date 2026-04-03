@@ -124,39 +124,76 @@ function net = build_base_network()
 % - 信任矩阵：trust
 
 % 节点数
-n = 8;
+n = 15;
 
 % 源点与终点
 s = 1;
-t = 3;
+t = 15;
 
 % ------------------------- 1) 带宽矩阵 Y -------------------------
 Y = inf(n);
-Y(1, 2) = 20; Y(1, 7) = 30; Y(2, 4) = 12; Y(2, 8) = 30; Y(3, 4) = 28;
-Y(3, 5) = 20; Y(3, 8) = 25; Y(4, 7) = 25; Y(5, 6) = 30; Y(6, 7) = 25;
-Y(2, 1) = 20; Y(7, 1) = 30; Y(4, 2) = 12; Y(8, 2) = 30; Y(4, 3) = 28;
-Y(5, 3) = 20; Y(8, 3) = 25; Y(7, 4) = 25; Y(6, 5) = 30; Y(7, 6) = 25;
+
+% 三条主候选走廊 + 若干横向备份链路（无向建模为双向同参）
+% A 走廊：1-2-5-9-12-15
+Y(1, 2) = 34; Y(2, 5) = 33; Y(5, 9) = 32; Y(9, 12) = 31; Y(12, 15) = 30;
+% B 走廊：1-3-6-10-13-15
+Y(1, 3) = 29; Y(3, 6) = 29; Y(6, 10) = 28; Y(10, 13) = 28; Y(13, 15) = 27;
+% C 走廊：1-4-8-11-14-15
+Y(1, 4) = 26; Y(4, 8) = 26; Y(8, 11) = 25; Y(11, 14) = 25; Y(14, 15) = 24;
+% 横向冗余链路
+Y(2, 3) = 24; Y(3, 4) = 24; Y(5, 6) = 23; Y(6, 8) = 22; Y(9, 10) = 23;
+Y(10, 11) = 22; Y(12, 13) = 22; Y(13, 14) = 22; Y(5, 10) = 22; Y(8, 13) = 21;
+Y(4, 7) = 22; Y(7, 11) = 21; Y(7, 9) = 21;
+
+Y = min(Y, Y.');
 
 % ------------------------- 2) 时延矩阵 D -------------------------
 D = inf(n);
-D(1, 2) = 4; D(1, 7) = 2; D(2, 4) = 8; D(2, 8) = 4; D(3, 4) = 6;
-D(3, 5) = 4; D(3, 8) = 7; D(4, 7) = 6; D(5, 6) = 4; D(6, 7) = 3;
-D(2, 1) = 4; D(7, 1) = 2; D(4, 2) = 8; D(8, 2) = 4; D(4, 3) = 6;
-D(5, 3) = 4; D(8, 3) = 7; D(7, 4) = 6; D(6, 5) = 4; D(7, 6) = 3;
+
+% A 走廊
+D(1, 2) = 2.0; D(2, 5) = 2.2; D(5, 9) = 2.0; D(9, 12) = 2.3; D(12, 15) = 2.1;
+% B 走廊
+D(1, 3) = 2.4; D(3, 6) = 2.3; D(6, 10) = 2.4; D(10, 13) = 2.3; D(13, 15) = 2.2;
+% C 走廊
+D(1, 4) = 2.6; D(4, 8) = 2.5; D(8, 11) = 2.6; D(11, 14) = 2.4; D(14, 15) = 2.3;
+% 横向冗余链路
+D(2, 3) = 2.4; D(3, 4) = 2.5; D(5, 6) = 2.5; D(6, 8) = 2.6; D(9, 10) = 2.5;
+D(10, 11) = 2.6; D(12, 13) = 2.4; D(13, 14) = 2.5; D(5, 10) = 2.8; D(8, 13) = 2.8;
+D(4, 7) = 2.2; D(7, 11) = 2.4; D(7, 9) = 2.3;
+
+D = min(D, D.');
 
 % ------------------------- 3) 抖动矩阵 J -------------------------
 J = inf(n);
-J(1, 2) = 1; J(1, 7) = 1; J(2, 4) = 2; J(2, 8) = 1; J(3, 4) = 3;
-J(3, 5) = 0.5; J(3, 8) = 2; J(4, 7) = 3; J(5, 6) = 3; J(6, 7) = 1;
-J(2, 1) = 1; J(7, 1) = 1; J(4, 2) = 2; J(8, 2) = 1; J(4, 3) = 3;
-J(5, 3) = 0.5; J(8, 3) = 2; J(7, 4) = 3; J(6, 5) = 3; J(7, 6) = 1;
+
+% A 走廊
+J(1, 2) = 0.80; J(2, 5) = 0.90; J(5, 9) = 0.80; J(9, 12) = 0.90; J(12, 15) = 0.80;
+% B 走廊
+J(1, 3) = 1.00; J(3, 6) = 0.95; J(6, 10) = 1.00; J(10, 13) = 0.95; J(13, 15) = 0.90;
+% C 走廊
+J(1, 4) = 1.10; J(4, 8) = 1.10; J(8, 11) = 1.00; J(11, 14) = 1.00; J(14, 15) = 0.95;
+% 横向冗余链路
+J(2, 3) = 1.00; J(3, 4) = 1.05; J(5, 6) = 1.10; J(6, 8) = 1.10; J(9, 10) = 1.00;
+J(10, 11) = 1.10; J(12, 13) = 1.00; J(13, 14) = 1.05; J(5, 10) = 1.20; J(8, 13) = 1.20;
+J(4, 7) = 0.90; J(7, 11) = 1.00; J(7, 9) = 0.95;
+
+J = min(J, J.');
 
 % ------------------------- 4) 丢包率矩阵 Z -------------------------
 Z = inf(n);
-Z(1, 2) = 0.02; Z(1, 7) = 0.01; Z(2, 4) = 0.01; Z(2, 8) = 0.04; Z(3, 4) = 0.04;
-Z(3, 5) = 0.01; Z(3, 8) = 0.05; Z(4, 7) = 0.02; Z(5, 6) = 0.02; Z(6, 7) = 0.02;
-Z(2, 1) = 0.02; Z(7, 1) = 0.01; Z(4, 2) = 0.01; Z(8, 2) = 0.04; Z(4, 3) = 0.04;
-Z(5, 3) = 0.01; Z(8, 3) = 0.05; Z(7, 4) = 0.02; Z(6, 5) = 0.02; Z(7, 6) = 0.02;
+
+% A 走廊
+Z(1, 2) = 0.010; Z(2, 5) = 0.012; Z(5, 9) = 0.011; Z(9, 12) = 0.012; Z(12, 15) = 0.011;
+% B 走廊
+Z(1, 3) = 0.015; Z(3, 6) = 0.014; Z(6, 10) = 0.015; Z(10, 13) = 0.014; Z(13, 15) = 0.013;
+% C 走廊
+Z(1, 4) = 0.018; Z(4, 8) = 0.017; Z(8, 11) = 0.016; Z(11, 14) = 0.016; Z(14, 15) = 0.015;
+% 横向冗余链路
+Z(2, 3) = 0.018; Z(3, 4) = 0.018; Z(5, 6) = 0.020; Z(6, 8) = 0.021; Z(9, 10) = 0.019;
+Z(10, 11) = 0.020; Z(12, 13) = 0.018; Z(13, 14) = 0.019; Z(5, 10) = 0.022; Z(8, 13) = 0.022;
+Z(4, 7) = 0.016; Z(7, 11) = 0.017; Z(7, 9) = 0.017;
+
+Z = min(Z, Z.');
 
 % ------------------------- 5) 节点与链路状态 -------------------------
 % 节点存活向量：1 表示节点正常，0 表示节点失效
@@ -187,10 +224,12 @@ trust(1:n+1:end) = 1;
 
 % 正常场景下允许存在轻微背景风险，但不影响整体正常性
 % 这里将备用路径上的若干链路设置为轻微风险背景
-trust(2, 8) = 0.98;
-trust(8, 2) = 0.98;
-trust(8, 3) = 0.96;
-trust(3, 8) = 0.96;
+trust(5, 10) = 0.96;
+trust(10, 5) = 0.96;
+trust(8, 13) = 0.95;
+trust(13, 8) = 0.95;
+trust(7, 11) = 0.97;
+trust(11, 7) = 0.97;
 
 % 数值安全参数：防止 log(1 - Z_eff) 出现 log(0)
 eps_z = 1e-6;
@@ -299,14 +338,15 @@ scenarios(1).notes = '作为恢复评价的基准场景。';
 %% ========================= S1 节点失效场景 =========================
 net1 = base_net;
 
-% 节点 4 失效，同时使与节点 4 相连的链路失效
-failed_node = 4;
+% 节点 5 失效，同时使与节点 5 相连的链路失效
+% 该故障会切断 A 走廊，通常触发向 B 走廊重路由
+failed_node = 5;
 net1.node_alive(failed_node) = false;
 net1.link_alive(failed_node, :) = false;
 net1.link_alive(:, failed_node) = false;
 
 scenarios(2).name = 'S1';
-scenarios(2).description = '节点失效场景：节点 4 失效，与节点 4 相连的链路同步失效，不额外加入链路退化与风险惩罚。';
+scenarios(2).description = '节点失效场景：节点 5 失效，与节点 5 相连链路同步失效，不额外加入链路退化与风险惩罚。';
 scenarios(2).net = net1;
 scenarios(2).need_recovery = true;
 scenarios(2).notes = '用于体现单点节点失效后，算法是否能够完成可行重路由。';
@@ -314,20 +354,22 @@ scenarios(2).notes = '用于体现单点节点失效后，算法是否能够完�
 %% ========================= S2 链路退化场景 =========================
 net2 = base_net;
 
-% 对 2->8 和 8->3 两段链路施加退化
-net2.degY(2, 8) = 0.10;
-net2.degD(2, 8) = 0.25;
-net2.degJ(2, 8) = 0.30;
-net2.degZ(2, 8) = 0.01;
+% 对 A 走廊关键链路施加退化，模拟链路质量下滑
+% 该设置通常会使最优路径从 A 走廊转移到 B 走廊或 C 走廊
+net2.degY(2, 5) = 0.25; net2.degD(2, 5) = 0.35; net2.degJ(2, 5) = 0.45; net2.degZ(2, 5) = 0.020;
+net2.degY(5, 9) = 0.20; net2.degD(5, 9) = 0.30; net2.degJ(5, 9) = 0.35; net2.degZ(5, 9) = 0.015;
+net2.degY(9, 12) = 0.18; net2.degD(9, 12) = 0.28; net2.degJ(9, 12) = 0.30; net2.degZ(9, 12) = 0.012;
 
-net2.degY(8, 3) = 0.08;
-net2.degD(8, 3) = 0.20;
-net2.degJ(8, 3) = 0.20;
-net2.degZ(8, 3) = 0.01;
+net2.degY(5, 2) = net2.degY(2, 5);   net2.degD(5, 2) = net2.degD(2, 5);
+net2.degJ(5, 2) = net2.degJ(2, 5);   net2.degZ(5, 2) = net2.degZ(2, 5);
+net2.degY(9, 5) = net2.degY(5, 9);   net2.degD(9, 5) = net2.degD(5, 9);
+net2.degJ(9, 5) = net2.degJ(5, 9);   net2.degZ(9, 5) = net2.degZ(5, 9);
+net2.degY(12, 9) = net2.degY(9, 12); net2.degD(12, 9) = net2.degD(9, 12);
+net2.degJ(12, 9) = net2.degJ(9, 12); net2.degZ(12, 9) = net2.degZ(9, 12);
 
 % 本场景信任保持不变
 scenarios(3).name = 'S2';
-scenarios(3).description = '链路退化场景：节点均正常，仅对 2->8 和 8->3 施加带宽下降、时延增加、抖动增加和轻微丢包增加。';
+scenarios(3).description = '链路退化场景：节点均正常，仅对 A 走廊关键链路施加带宽下降、时延增加、抖动增加和轻微丢包增加。';
 scenarios(3).net = net2;
 scenarios(3).need_recovery = true;
 scenarios(3).notes = '用于体现路径候选集中的某些链路性能退化后，最终路径与 QoS 指标的变化。';
@@ -337,20 +379,17 @@ net3 = base_net;
 
 % 节点和链路均可用，但设置风险链路
 % 场景目标：体现“风险惩罚导致路径规避”
-net3.trust(7, 4) = 0.30;
-net3.trust(4, 7) = 0.30;
-net3.trust(4, 3) = 0.35;
-net3.trust(3, 4) = 0.35;
-net3.trust(8, 3) = 0.88;
-net3.trust(3, 8) = 0.88;
+% 将 A/B 两条主走廊 trust 显著降低，促使算法转向 C 走廊
+net3.trust(2, 5) = 0.42; net3.trust(5, 2) = 0.42;
+net3.trust(5, 9) = 0.38; net3.trust(9, 5) = 0.38;
+net3.trust(3, 6) = 0.45; net3.trust(6, 3) = 0.45;
+net3.trust(6, 10) = 0.40; net3.trust(10, 6) = 0.40;
 
 % 可选叠加轻微 degZ，体现风险链路并非完全失效，而是具有更高的不确定性
-net3.degZ(7, 4) = 0.010;
-net3.degZ(4, 7) = 0.010;
-net3.degZ(4, 3) = 0.015;
-net3.degZ(3, 4) = 0.015;
-net3.degZ(8, 3) = 0.008;
-net3.degZ(3, 8) = 0.008;
+net3.degZ(2, 5) = 0.010; net3.degZ(5, 2) = 0.010;
+net3.degZ(5, 9) = 0.012; net3.degZ(9, 5) = 0.012;
+net3.degZ(3, 6) = 0.010; net3.degZ(6, 3) = 0.010;
+net3.degZ(6, 10) = 0.012; net3.degZ(10, 6) = 0.012;
 
 scenarios(4).name = 'S3';
 scenarios(4).description = '风险链路场景：节点与链路仍可用，但若干链路 trust 降低，并叠加轻微 degZ，以体现风险惩罚导致的路径规避。';
@@ -361,28 +400,30 @@ scenarios(4).notes = '该场景的重点不是链路物理失效，而是路径�
 %% ========================= S4 组合异常场景 =========================
 net4 = base_net;
 
-% 节点 4 失效
-net4.node_alive(4) = false;
-net4.link_alive(4, :) = false;
-net4.link_alive(:, 4) = false;
+% 节点 5 失效（A 走廊断裂）
+net4.node_alive(5) = false;
+net4.link_alive(5, :) = false;
+net4.link_alive(:, 5) = false;
 
-% 同时对替代路径 2->8、8->3 加入退化
-net4.degY(2, 8) = 0.10;
-net4.degD(2, 8) = 0.25;
-net4.degJ(2, 8) = 0.30;
-net4.degZ(2, 8) = 0.01;
+% 同时对 B 走廊关键链路加入退化（但保持可达）
+net4.degY(3, 6) = 0.12; net4.degD(3, 6) = 0.22; net4.degJ(3, 6) = 0.20; net4.degZ(3, 6) = 0.010;
+net4.degY(6, 10) = 0.15; net4.degD(6, 10) = 0.25; net4.degJ(6, 10) = 0.22; net4.degZ(6, 10) = 0.012;
+net4.degY(10, 13) = 0.10; net4.degD(10, 13) = 0.20; net4.degJ(10, 13) = 0.18; net4.degZ(10, 13) = 0.010;
 
-net4.degY(8, 3) = 0.08;
-net4.degD(8, 3) = 0.20;
-net4.degJ(8, 3) = 0.20;
-net4.degZ(8, 3) = 0.01;
+net4.degY(6, 3) = net4.degY(3, 6);     net4.degD(6, 3) = net4.degD(3, 6);
+net4.degJ(6, 3) = net4.degJ(3, 6);     net4.degZ(6, 3) = net4.degZ(3, 6);
+net4.degY(10, 6) = net4.degY(6, 10);   net4.degD(10, 6) = net4.degD(6, 10);
+net4.degJ(10, 6) = net4.degJ(6, 10);   net4.degZ(10, 6) = net4.degZ(6, 10);
+net4.degY(13, 10) = net4.degY(10, 13); net4.degD(13, 10) = net4.degD(10, 13);
+net4.degJ(13, 10) = net4.degJ(10, 13); net4.degZ(13, 10) = net4.degZ(10, 13);
 
-% 并设置略低 trust
-net4.trust(2, 8) = 0.92;
-net4.trust(8, 3) = 0.88;
+% 并设置 B 走廊略低 trust，C 走廊保持正常
+net4.trust(3, 6) = 0.82; net4.trust(6, 3) = 0.82;
+net4.trust(6, 10) = 0.80; net4.trust(10, 6) = 0.80;
+net4.trust(10, 13) = 0.84; net4.trust(13, 10) = 0.84;
 
 scenarios(5).name = 'S4';
-scenarios(5).description = '组合异常场景：节点 4 失效，同时对替代路径 2->8、8->3 加入退化，并赋予略低 trust。';
+scenarios(5).description = '组合异常场景：节点 5 失效，同时对 B 走廊关键链路加入退化并赋予略低 trust。';
 scenarios(5).net = net4;
 scenarios(5).need_recovery = true;
 scenarios(5).notes = '用于体现“异常后重路由 + 风险/退化共存”的复合网络状态。';
@@ -491,14 +532,12 @@ while ~isempty(Q)
         break;
     end
 
-    % 遍历 u 的所有后继节点
-    for v = 1:n
+    % 遍历 u 的所有可存在后继节点（避免对不存在链路做无效扫描）
+    neighbors = find(net.link_exist(u, :));
+    for idx_nb = 1:numel(neighbors)
+        v = neighbors(idx_nb);
         % ---------- 可达性与状态检查 ----------
         if u == v
-            continue;
-        end
-
-        if ~net.link_exist(u, v)
             continue;
         end
 
@@ -520,16 +559,7 @@ while ~isempty(Q)
         % D_eff = D * (1 + degD)
         % J_eff = J * (1 + degJ)
         % Z_eff = min(1 - eps_z, Z + degZ)
-        Y_eff = net.Y(u, v) * (1 - net.degY(u, v));
-        D_eff = net.D(u, v) * (1 + net.degD(u, v));
-        J_eff = net.J(u, v) * (1 + net.degJ(u, v));
-        Z_eff = min(1 - net.eps_z, net.Z(u, v) + net.degZ(u, v));
-
-        % 对极端非法值进行保护
-        Y_eff = max(0, Y_eff);
-        D_eff = max(0, D_eff);
-        J_eff = max(0, J_eff);
-        Z_eff = max(0, min(1 - net.eps_z, Z_eff));
+        [Y_eff, D_eff, J_eff, Z_eff] = compute_effective_link_values(net, u, v);
 
         % 将丢包率转为成功率对数项
         X_eff = log(1 - Z_eff);
@@ -725,7 +755,10 @@ if isnan(prev(t))
 end
 
 u = t;
-path = u;
+path_rev = nan(1, numel(prev));
+cnt = 0;
+path_rev(1) = u;
+cnt = 1;
 
 while u ~= s
     u = prev(u);
@@ -735,8 +768,11 @@ while u ~= s
         return;
     end
 
-    path = [u, path]; %#ok<AGROW>
+    cnt = cnt + 1;
+    path_rev(cnt) = u;
 end
+
+path = fliplr(path_rev(1:cnt));
 
 end
 
@@ -913,16 +949,34 @@ function pos = build_node_positions()
 % 手工固定节点坐标
 % 采用论文拓扑示意图风格，避免自动布局导致的随机性和重复运行差异。
 
-pos = zeros(8, 2);
+pos = zeros(15, 2);
 
-pos(1, :) = [0.0, 4.0];
-pos(2, :) = [2.6, 5.8];
-pos(7, :) = [2.6, 2.2];
-pos(4, :) = [5.1, 4.0];
-pos(8, :) = [5.0, 6.9];
-pos(6, :) = [5.0, 1.0];
-pos(3, :) = [8.3, 5.4];
-pos(5, :) = [8.3, 2.3];
+% 起点与三条走廊的层级布局
+pos(1, :)  = [0.0, 5.0];
+
+% 第一层
+pos(2, :)  = [2.2, 7.3];
+pos(3, :)  = [2.4, 5.1];
+pos(4, :)  = [2.2, 2.9];
+
+% 第二层
+pos(5, :)  = [4.6, 7.1];
+pos(6, :)  = [4.8, 5.0];
+pos(7, :)  = [4.7, 3.3];
+pos(8, :)  = [4.6, 2.0];
+
+% 第三层
+pos(9, :)  = [7.2, 7.0];
+pos(10, :) = [7.4, 5.0];
+pos(11, :) = [7.2, 2.8];
+
+% 第四层
+pos(12, :) = [9.8, 6.8];
+pos(13, :) = [10.0, 5.0];
+pos(14, :) = [9.8, 3.0];
+
+% 终点
+pos(15, :) = [12.4, 5.0];
 
 end
 
@@ -1355,10 +1409,8 @@ if ~link_info.is_alive
     return;
 end
 
-link_info.Yeff = max(0, net.Y(i, j) * (1 - net.degY(i, j)));
-link_info.Deff = max(0, net.D(i, j) * (1 + net.degD(i, j)));
-link_info.Jeff = max(0, net.J(i, j) * (1 + net.degJ(i, j)));
-link_info.Zeff = max(0, min(1 - net.eps_z, net.Z(i, j) + net.degZ(i, j)));
+[link_info.Yeff, link_info.Deff, link_info.Jeff, link_info.Zeff] = ...
+    compute_effective_link_values(net, i, j);
 
 end
 
@@ -1437,10 +1489,21 @@ if isempty(path)
     return;
 end
 
-s = num2str(path(1));
-for k = 2:numel(path)
-    s = [s, ' -> ', num2str(path(k))]; %#ok<AGROW>
+parts = arrayfun(@num2str, path, 'UniformOutput', false);
+s = strjoin(parts, ' -> ');
+
 end
+
+%% ========================================================================
+function [Y_eff, D_eff, J_eff, Z_eff] = compute_effective_link_values(net, i, j)
+% 统一计算链路有效参数，并进行数值安全裁剪
+
+Y_eff = max(0, net.Y(i, j) * (1 - net.degY(i, j)));
+D_eff = max(0, net.D(i, j) * (1 + net.degD(i, j)));
+J_eff = max(0, net.J(i, j) * (1 + net.degJ(i, j)));
+
+Z_raw = net.Z(i, j) + net.degZ(i, j);
+Z_eff = max(0, min(1 - net.eps_z, Z_raw));
 
 end
 
