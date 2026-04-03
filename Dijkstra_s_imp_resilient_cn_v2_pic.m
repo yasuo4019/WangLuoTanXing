@@ -79,6 +79,24 @@ else
     warning('未找到 S0 正常场景，无法计算恢复指标。');
 end
 
+%% ========================= 4.5 T_calc 诊断输出（仅命令行） =========================
+% 说明：
+% - 该部分用于细化观察“旧路径探测 + 重路由计算”的时间组成；
+% - 仅打印到命令行，不写入 results，不进入工作区，不进入图像面板。
+if ~isempty(idx_normal)
+    fprintf('\n');
+    fprintf('===============================================================\n');
+    fprintf(' T_calc 细化诊断输出（命令行观察用）\n');
+    fprintf('===============================================================\n');
+
+    old_path = results(idx_normal).path;
+    for k = 1:num_scenarios
+        if scenarios(k).need_recovery
+            print_tcalc_diagnostics(scenarios(k), old_path, results(k), params);
+        end
+    end
+end
+
 %% ========================= 5. 二次打印（含恢复指标） =========================
 fprintf('\n');
 fprintf('===============================================================\n');
@@ -758,6 +776,296 @@ while u ~= s
 end
 
 path = fliplr(path_rev(1:cnt));
+
+end
+
+%% ========================================================================
+function print_tcalc_diagnostics(scenario, old_path, result_scene, params)
+% 打印 T_calc 细化诊断（仅命令行）
+% 输出信息包括：
+% 1) 旧路径逐跳探测在何处失败及耗时；
+% 2) 重路由算法求解耗时（即 result_scene.calc_time）；
+% 3) 若干可行候选路径代价对比与最终最优路径说明。
+
+fprintf('\n');
+fprintf('-------------------- T_calc 诊断：%s --------------------\n', scenario.name);
+probe = struct('T_probe', 0, 'status_text', '未执行');
+
+if isempty(old_path)
+    fprintf('S0 基准旧路径为空，跳过旧路径探测。\n');
+else
+    probe = probe_old_path_until_break(old_path, scenario.net, params);
+    fprintf('旧路径：%s\n', path_to_str(old_path));
+    fprintf('旧路径探测耗时 T_probe：%.6f 秒\n', probe.T_probe);
+    fprintf('旧路径探测结论：%s\n', probe.status_text);
+end
+
+fprintf('重路由计算耗时 T_reroute（算法实测）：%.6f 秒\n', result_scene.calc_time);
+fprintf('细化对比：T_probe + T_reroute = %.6f 秒\n', probe.T_probe + result_scene.calc_time);
+
+% 候选路径代价对比（仅用于说明“为什么选中当前最优路径”）
+all_paths = enumerate_simple_paths(scenario.net, scenario.net.s, scenario.net.t, 8, 80);
+cmp = build_candidate_cost_table(all_paths, scenario.net, params);
+
+if isempty(cmp)
+    fprintf('候选路径对比：当前场景无可行候选路径。\n');
+else
+    [~, idx_sort] = sort([cmp.total_cost], 'ascend');
+    cmp = cmp(idx_sort);
+
+    topN = min(3, numel(cmp));
+    fprintf('候选路径代价对比（前 %d 条）：\n', topN);
+    for i = 1:topN
+        fprintf('  #%d 路径=%s | cost=%.6f | bw=%.3f | delay=%.3f | jitter=%.3f | succ=%.6f\n', ...
+            i, cmp(i).path_str, cmp(i).total_cost, cmp(i).bandwidth, ...
+            cmp(i).delay, cmp(i).jitter, cmp(i).success_prob);
+    end
+
+    selected_str = path_to_str(result_scene.path);
+    fprintf('算法选中路径：%s\n', selected_str);
+    if strcmp(selected_str, cmp(1).path_str)
+        fprintf('结论：算法选中路径与候选集中最低代价路径一致。\n');
+    else
+        fprintf('结论：算法选中路径与候选最低代价路径不一致（需进一步排查参数/约束）。\n');
+    end
+end
+
+fprintf('---------------------------------------------------------------\n');
+
+end
+
+%% ========================================================================
+function probe = probe_old_path_until_break(path, net, params)
+% 逐跳探测旧路径在当前场景中的可通行性
+% 仅用于命令行诊断，不影响算法求解与结果结构体
+
+probe = struct();
+probe.T_probe = 0;
+probe.status_text = '未执行';
+
+if isempty(path) || numel(path) < 2
+    probe.status_text = '旧路径长度不足，无需探测';
+    return;
+end
+
+accum_Y = inf;
+accum_D = 0;
+accum_J = 0;
+accum_X = 0;
+
+t_probe = tic;
+
+for k = 1:(numel(path) - 1)
+    u = path(k);
+    v = path(k + 1);
+    t_hop = tic;
+
+    if ~net.node_alive(u)
+        probe.T_probe = toc(t_probe);
+        probe.status_text = sprintf('在旧路径节点 %d 处发现节点失效；该跳检查耗时 %.6f 秒', u, toc(t_hop));
+        return;
+    end
+
+    if ~net.node_alive(v)
+        probe.T_probe = toc(t_probe);
+        probe.status_text = sprintf('在旧路径下一跳节点 %d 处发现节点失效；该跳检查耗时 %.6f 秒', v, toc(t_hop));
+        return;
+    end
+
+    if ~net.link_exist(u, v)
+        probe.T_probe = toc(t_probe);
+        probe.status_text = sprintf('在边 %d->%d 处发现链路不存在；该跳检查耗时 %.6f 秒', u, v, toc(t_hop));
+        return;
+    end
+
+    if ~net.link_alive(u, v)
+        probe.T_probe = toc(t_probe);
+        probe.status_text = sprintf('在边 %d->%d 处发现链路失效；该跳检查耗时 %.6f 秒', u, v, toc(t_hop));
+        return;
+    end
+
+    [Y_eff, D_eff, J_eff, Z_eff] = compute_effective_link_values(net, u, v);
+
+    accum_Y = min(accum_Y, Y_eff);
+    accum_D = accum_D + D_eff;
+    accum_J = accum_J + J_eff;
+    accum_X = accum_X + log(1 - Z_eff);
+
+    if accum_Y < params.y_min
+        probe.T_probe = toc(t_probe);
+        probe.status_text = sprintf('在边 %d->%d 后触发带宽约束失败；该跳检查耗时 %.6f 秒', u, v, toc(t_hop));
+        return;
+    end
+    if accum_D > params.d_max
+        probe.T_probe = toc(t_probe);
+        probe.status_text = sprintf('在边 %d->%d 后触发时延约束失败；该跳检查耗时 %.6f 秒', u, v, toc(t_hop));
+        return;
+    end
+    if accum_J > params.j_max
+        probe.T_probe = toc(t_probe);
+        probe.status_text = sprintf('在边 %d->%d 后触发抖动约束失败；该跳检查耗时 %.6f 秒', u, v, toc(t_hop));
+        return;
+    end
+    if accum_X < params.x_min
+        probe.T_probe = toc(t_probe);
+        probe.status_text = sprintf('在边 %d->%d 后触发成功率约束失败；该跳检查耗时 %.6f 秒', u, v, toc(t_hop));
+        return;
+    end
+end
+
+probe.T_probe = toc(t_probe);
+probe.status_text = sprintf('旧路径在当前场景仍可行；完整探测耗时 %.6f 秒', probe.T_probe);
+
+end
+
+%% ========================================================================
+function cmp = build_candidate_cost_table(paths, net, params)
+% 评估候选路径代价，返回可行路径对比表（结构体数组）
+
+cmp = struct('path', {}, 'path_str', {}, 'total_cost', {}, ...
+             'bandwidth', {}, 'delay', {}, 'jitter', {}, 'success_prob', {});
+
+for i = 1:numel(paths)
+    eval_res = evaluate_path_cost(paths{i}, net, params);
+    if ~eval_res.feasible
+        continue;
+    end
+
+    item = struct();
+    item.path = paths{i};
+    item.path_str = path_to_str(paths{i});
+    item.total_cost = eval_res.total_cost;
+    item.bandwidth = eval_res.bandwidth;
+    item.delay = eval_res.delay;
+    item.jitter = eval_res.jitter;
+    item.success_prob = eval_res.success_prob;
+
+    cmp(end + 1) = item; %#ok<AGROW>
+end
+
+end
+
+%% ========================================================================
+function eval_res = evaluate_path_cost(path, net, params)
+% 评估给定路径在当前网络下的可行性与总代价
+
+eval_res = struct();
+eval_res.feasible = false;
+eval_res.total_cost = inf;
+eval_res.bandwidth = NaN;
+eval_res.delay = NaN;
+eval_res.jitter = NaN;
+eval_res.success_prob = NaN;
+
+if isempty(path) || numel(path) < 2
+    return;
+end
+
+accum_Y = inf;
+accum_D = 0;
+accum_J = 0;
+accum_X = 0;
+accum_T = 1;
+
+for k = 1:(numel(path) - 1)
+    u = path(k);
+    v = path(k + 1);
+
+    if ~net.node_alive(u) || ~net.node_alive(v)
+        return;
+    end
+    if ~net.link_exist(u, v) || ~net.link_alive(u, v)
+        return;
+    end
+
+    [Y_eff, D_eff, J_eff, Z_eff] = compute_effective_link_values(net, u, v);
+    accum_Y = min(accum_Y, Y_eff);
+    accum_D = accum_D + D_eff;
+    accum_J = accum_J + J_eff;
+    accum_X = accum_X + log(1 - Z_eff);
+    accum_T = min(accum_T, net.trust(u, v));
+
+    if accum_Y < params.y_min || accum_D > params.d_max || ...
+       accum_J > params.j_max || accum_X < params.x_min
+        return;
+    end
+end
+
+risk_penalty = -log(max(accum_T, params.eps_t));
+total_cost = params.w_y * (accum_Y / params.y_min) + ...
+             params.w_d * (accum_D / params.d_max) + ...
+             params.w_j * (accum_J / params.j_max) + ...
+             params.w_x * (accum_X / params.x_min) + ...
+             params.w_t * risk_penalty;
+
+eval_res.feasible = true;
+eval_res.total_cost = total_cost;
+eval_res.bandwidth = accum_Y;
+eval_res.delay = accum_D;
+eval_res.jitter = accum_J;
+eval_res.success_prob = exp(accum_X);
+
+end
+
+%% ========================================================================
+function paths = enumerate_simple_paths(net, s, t, max_depth, max_paths)
+% 枚举从 s 到 t 的简单路径（深度受限，数量受限）
+
+if nargin < 4
+    max_depth = 8;
+end
+if nargin < 5
+    max_paths = 80;
+end
+
+paths = {};
+if ~net.node_alive(s) || ~net.node_alive(t)
+    return;
+end
+
+visited = false(1, net.n);
+visited(s) = true;
+[paths, ~] = dfs_collect_paths(net, s, t, visited, s, paths, max_depth, max_paths);
+
+end
+
+%% ========================================================================
+function [paths, stop_flag] = dfs_collect_paths(net, u, t, visited, curr_path, paths, max_depth, max_paths)
+% 深度优先收集简单路径
+
+stop_flag = false;
+
+if numel(paths) >= max_paths
+    stop_flag = true;
+    return;
+end
+
+if u == t
+    paths{end + 1} = curr_path; %#ok<AGROW>
+    if numel(paths) >= max_paths
+        stop_flag = true;
+    end
+    return;
+end
+
+if numel(curr_path) >= max_depth
+    return;
+end
+
+neighbors = find(net.link_exist(u, :) & net.link_alive(u, :) & net.node_alive);
+for idx = 1:numel(neighbors)
+    v = neighbors(idx);
+    if visited(v)
+        continue;
+    end
+
+    visited2 = visited;
+    visited2(v) = true;
+    [paths, stop_flag] = dfs_collect_paths(net, v, t, visited2, [curr_path, v], paths, max_depth, max_paths); %#ok<AGROW>
+    if stop_flag
+        return;
+    end
+end
 
 end
 
