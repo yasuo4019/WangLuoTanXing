@@ -1331,16 +1331,52 @@ end
 function render_extra_topology_figures(base_net, scenarios, results)
 % 额外绘图：
 % 1) 网络节点关系示意图（无链路参数）；
-% 2) S0~S4 特殊参数拓扑图（仅显示场景差异参数，不显示右侧面板）。
+% 2) S0 预查路拓扑图（保留链路参数，不显示右侧面板，不高亮路径）；
+% 3) S0~S4 特殊参数拓扑图（仅显示场景差异参数，不显示右侧面板）。
 
 pos = build_node_positions();
 viz = build_visual_config();
 
 render_plain_topology_figure(base_net, pos, viz);
+render_s0_presearch_figure(base_net, pos, viz);
 
 for k = 1:numel(scenarios)
     render_special_only_figure(base_net, scenarios(k), results(k), pos, viz, k);
 end
+
+end
+
+%% ========================================================================
+function render_s0_presearch_figure(base_net, pos, viz)
+% S0 场景单独窗口（预查路形态）
+% 要求：
+% - 保留链路参数标签（Y,D,J,Z）；
+% - 不显示右侧参数面板；
+% - 不显示路径高亮（即“未进行路径查找后的观感”）。
+
+fig = figure('Color', 'w', ...
+    'Name', 'S0 预查路网络示意图（含链路参数）', ...
+    'NumberTitle', 'off', ...
+    'Position', [145, 95, 1080, 760]);
+
+ax = axes('Parent', fig, 'Position', [0.05, 0.06, 0.90, 0.88]);
+hold(ax, 'on');
+axis(ax, 'equal');
+axis(ax, 'off');
+
+xlim(ax, [min(pos(:, 1)) - 1.3, max(pos(:, 1)) + 1.3]);
+ylim(ax, [min(pos(:, 2)) - 1.3, max(pos(:, 2)) + 1.3]);
+
+empty_result = init_empty_result_struct(); % 无路径高亮
+draw_network_edges(ax, base_net, empty_result, pos, viz, false);
+draw_network_nodes(ax, base_net, pos, viz);
+
+title(ax, 'S0 预查路网络示意图（仅拓扑+链路参数）', 'FontWeight', 'bold');
+
+text(ax, min(pos(:, 1)) - 1.1, min(pos(:, 2)) - 1.05, ...
+    '边标签：原始参数 Y, D, J, Z（未高亮路径）', ...
+    'FontSize', 9, ...
+    'Interpreter', 'none');
 
 end
 
