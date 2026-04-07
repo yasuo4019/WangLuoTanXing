@@ -113,6 +113,11 @@ end
 % T_rec、Q_ret、S_cont 等恢复性指标。
 render_all_figures(base_net, scenarios, results, params);
 
+% 额外拓扑窗口：
+% 1) 纯节点关系示意图（无链路参数）；
+% 2) S0~S4 特殊参数拓扑图（仅显示场景中特殊变化参数）。
+render_extra_topology_figures(base_net, scenarios, results);
+
 %% ========================= 7. 汇总输出 =========================
 summary_tbl = summarize_results(results);
 
@@ -1318,6 +1323,245 @@ viz = build_visual_config();
 
 for k = 1:numel(scenarios)
     render_scenario_figure(base_net, scenarios(k), results(k), params, pos, viz, k);
+end
+
+end
+
+%% ========================================================================
+function render_extra_topology_figures(base_net, scenarios, results)
+% 额外绘图：
+% 1) 网络节点关系示意图（无链路参数）；
+% 2) S0~S4 特殊参数拓扑图（仅显示场景差异参数，不显示右侧面板）。
+
+pos = build_node_positions();
+viz = build_visual_config();
+
+render_plain_topology_figure(base_net, pos, viz);
+
+for k = 1:numel(scenarios)
+    render_special_only_figure(base_net, scenarios(k), results(k), pos, viz, k);
+end
+
+end
+
+%% ========================================================================
+function render_plain_topology_figure(net, pos, viz)
+% 纯关系图：仅显示节点与连接关系，不显示链路参数
+
+fig = figure('Color', 'w', ...
+    'Name', '网络节点关系示意图（无链路参数）', ...
+    'NumberTitle', 'off', ...
+    'Position', [120, 80, 980, 700]);
+
+ax = axes('Parent', fig, 'Position', [0.05, 0.06, 0.90, 0.88]);
+hold(ax, 'on');
+axis(ax, 'equal');
+axis(ax, 'off');
+
+xlim(ax, [min(pos(:, 1)) - 1.3, max(pos(:, 1)) + 1.3]);
+ylim(ax, [min(pos(:, 2)) - 1.3, max(pos(:, 2)) + 1.3]);
+
+draw_topology_edges_without_labels(ax, net, pos, viz);
+draw_network_nodes(ax, net, pos, viz);
+
+title(ax, '网络节点关系示意图（仅节点编号与连接关系）', 'FontWeight', 'bold');
+
+end
+
+%% ========================================================================
+function render_special_only_figure(base_net, scenario, result, pos, viz, idx)
+% 特殊参数拓扑图：只显示场景特殊参数，不显示右侧面板
+
+fig_name = sprintf('%s 特殊参数拓扑图', scenario.name);
+fig = figure('Color', 'w', ...
+    'Name', fig_name, ...
+    'NumberTitle', 'off', ...
+    'Position', [160 + idx * 30, 95 + idx * 20, 1100, 760]);
+
+ax = axes('Parent', fig, 'Position', [0.05, 0.06, 0.90, 0.88]);
+hold(ax, 'on');
+axis(ax, 'equal');
+axis(ax, 'off');
+
+xlim(ax, [min(pos(:, 1)) - 1.3, max(pos(:, 1)) + 1.3]);
+ylim(ax, [min(pos(:, 2)) - 1.3, max(pos(:, 2)) + 1.3]);
+
+draw_topology_edges_without_labels(ax, scenario.net, pos, viz);
+draw_special_edge_labels(ax, base_net, scenario.net, pos, viz);
+draw_network_nodes(ax, scenario.net, pos, viz);
+
+if ~isempty(result.path)
+    highlight_path_edges(ax, result.path, pos, viz);
+end
+
+title(ax, sprintf('%s：仅显示场景特殊参数', get_scenario_title(scenario.name)), 'FontWeight', 'bold');
+
+end
+
+%% ========================================================================
+function draw_topology_edges_without_labels(ax, net, pos, viz)
+% 绘制不带参数标签的拓扑边
+
+n = net.n;
+for i = 1:n
+    for j = 1:n
+        if i == j || ~net.link_exist(i, j)
+            continue;
+        end
+
+        p1 = pos(i, :);
+        p2 = pos(j, :);
+        vec = p2 - p1;
+        len = norm(vec);
+        if len <= eps
+            continue;
+        end
+
+        dir_vec = vec / len;
+        p1s = p1 + dir_vec * viz.node_radius;
+        p2s = p2 - dir_vec * viz.node_radius;
+
+        edge_alive = net.link_alive(i, j) && net.node_alive(i) && net.node_alive(j);
+        if edge_alive
+            edge_color = [0.15, 0.15, 0.15];
+            edge_style = '-';
+            edge_w = viz.base_line_width;
+        else
+            edge_color = viz.failed_edge_color;
+            edge_style = '--';
+            edge_w = viz.failed_line_width;
+        end
+
+        line(ax, [p1s(1), p2s(1)], [p1s(2), p2s(2)], ...
+            'LineStyle', edge_style, 'LineWidth', edge_w, 'Color', edge_color);
+    end
+end
+
+end
+
+%% ========================================================================
+function draw_special_edge_labels(ax, base_net, scene_net, pos, viz)
+% 仅绘制场景相对于基准网络的“特殊参数”标签
+
+n = scene_net.n;
+for i = 1:n
+    for j = 1:n
+        if i == j || ~scene_net.link_exist(i, j)
+            continue;
+        end
+
+        [is_special, label_str, label_color] = build_special_label(base_net, scene_net, i, j);
+        if ~is_special
+            continue;
+        end
+
+        p1 = pos(i, :);
+        p2 = pos(j, :);
+        vec = p2 - p1;
+        len = norm(vec);
+        if len <= eps
+            continue;
+        end
+
+        dir_vec = vec / len;
+        perp_vec = [-dir_vec(2), dir_vec(1)];
+        mid = (p1 + p2) / 2;
+
+        if i < j
+            offset_sign = 1;
+        else
+            offset_sign = -1;
+        end
+
+        offset_mag = viz.edge_label_offset * 1.45 * (1 + 0.12 * mod(i + 2 * j, 3));
+        x_label = mid(1) + offset_sign * offset_mag * perp_vec(1);
+        y_label = mid(2) + offset_sign * offset_mag * perp_vec(2);
+
+        text(ax, x_label, y_label, label_str, ...
+            'FontSize', max(6.2, viz.edge_font_size - 0.1), ...
+            'Color', label_color, ...
+            'HorizontalAlignment', 'center', ...
+            'VerticalAlignment', 'middle', ...
+            'BackgroundColor', [1, 1, 1], ...
+            'Interpreter', 'none');
+    end
+end
+
+end
+
+%% ========================================================================
+function [is_special, label_str, label_color] = build_special_label(base_net, scene_net, i, j)
+% 构造“特殊参数”标签：仅输出与 S0 基准相比发生变化的参数
+
+is_special = false;
+label_str = '';
+label_color = [0.00, 0.00, 0.00];
+
+parts = {};
+
+if base_net.link_alive(i, j) && ~scene_net.link_alive(i, j)
+    parts{end + 1} = '失效'; %#ok<AGROW>
+    label_color = [0.55, 0.00, 0.00];
+end
+
+if scene_net.degY(i, j) ~= 0
+    parts{end + 1} = sprintf('degY=%.2f', scene_net.degY(i, j)); %#ok<AGROW>
+end
+if scene_net.degD(i, j) ~= 0
+    parts{end + 1} = sprintf('degD=%.2f', scene_net.degD(i, j)); %#ok<AGROW>
+end
+if scene_net.degJ(i, j) ~= 0
+    parts{end + 1} = sprintf('degJ=%.2f', scene_net.degJ(i, j)); %#ok<AGROW>
+end
+if scene_net.degZ(i, j) ~= 0
+    parts{end + 1} = sprintf('degZ=%.3f', scene_net.degZ(i, j)); %#ok<AGROW>
+end
+
+if abs(scene_net.trust(i, j) - base_net.trust(i, j)) > 1e-12
+    parts{end + 1} = sprintf('trust=%.2f', scene_net.trust(i, j)); %#ok<AGROW>
+    if all(label_color == 0)
+        label_color = [0.00, 0.20, 0.55];
+    end
+end
+
+if ~isempty(parts)
+    is_special = true;
+    label_str = sprintf('%d->%d\n%s', i, j, strjoin(parts, ', '));
+    if all(label_color == 0)
+        label_color = [0.00, 0.00, 0.00];
+    end
+end
+
+end
+
+%% ========================================================================
+function highlight_path_edges(ax, path, pos, viz)
+% 在拓扑图上高亮最终路径
+
+if isempty(path) || numel(path) < 2
+    return;
+end
+
+for k = 1:(numel(path) - 1)
+    i = path(k);
+    j = path(k + 1);
+
+    p1 = pos(i, :);
+    p2 = pos(j, :);
+    vec = p2 - p1;
+    len = norm(vec);
+    if len <= eps
+        continue;
+    end
+
+    dir_vec = vec / len;
+    p1s = p1 + dir_vec * viz.node_radius;
+    p2s = p2 - dir_vec * viz.node_radius;
+
+    line(ax, [p1s(1), p2s(1)], [p1s(2), p2s(2)], ...
+        'LineStyle', '-', ...
+        'LineWidth', viz.path_line_width, ...
+        'Color', viz.path_edge_color);
 end
 
 end
