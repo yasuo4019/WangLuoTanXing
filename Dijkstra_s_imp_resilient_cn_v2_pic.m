@@ -79,6 +79,24 @@ else
     warning('未找到 S0 正常场景，无法计算恢复指标。');
 end
 
+%% ========================= 4.5 T_calc 诊断输出（仅命令行） =========================
+% 说明：
+% - 该部分用于细化观察“旧路径探测 + 重路由计算”的时间组成；
+% - 仅打印到命令行，不写入 results，不进入工作区，不进入图像面板。
+if ~isempty(idx_normal)
+    fprintf('\n');
+    fprintf('===============================================================\n');
+    fprintf(' T_calc 细化诊断输出（命令行观察用）\n');
+    fprintf('===============================================================\n');
+
+    old_path = results(idx_normal).path;
+    for k = 1:num_scenarios
+        if scenarios(k).need_recovery
+            print_tcalc_diagnostics(scenarios(k), old_path, results(k), params);
+        end
+    end
+end
+
 %% ========================= 5. 二次打印（含恢复指标） =========================
 fprintf('\n');
 fprintf('===============================================================\n');
@@ -94,6 +112,11 @@ end
 % 图像绘制放在恢复指标计算之后执行，保证 S1~S4 的右侧参数面板能够完整显示
 % T_rec、Q_ret、S_cont 等恢复性指标。
 render_all_figures(base_net, scenarios, results, params);
+
+% 额外拓扑窗口：
+% 1) 纯节点关系示意图（无链路参数）；
+% 2) S0~S4 特殊参数拓扑图（仅显示场景中特殊变化参数）。
+render_extra_topology_figures(base_net, scenarios, results);
 
 %% ========================= 7. 汇总输出 =========================
 summary_tbl = summarize_results(results);
@@ -124,39 +147,80 @@ function net = build_base_network()
 % - 信任矩阵：trust
 
 % 节点数
-n = 8;
+n = 14;
 
 % 源点与终点
 s = 1;
-t = 3;
+t = 14;
 
 % ------------------------- 1) 带宽矩阵 Y -------------------------
 Y = inf(n);
-Y(1, 2) = 20; Y(1, 7) = 30; Y(2, 4) = 12; Y(2, 8) = 30; Y(3, 4) = 28;
-Y(3, 5) = 20; Y(3, 8) = 25; Y(4, 7) = 25; Y(5, 6) = 30; Y(6, 7) = 25;
-Y(2, 1) = 20; Y(7, 1) = 30; Y(4, 2) = 12; Y(8, 2) = 30; Y(4, 3) = 28;
-Y(5, 3) = 20; Y(8, 3) = 25; Y(7, 4) = 25; Y(6, 5) = 30; Y(7, 6) = 25;
+
+% 按示意图定义链路（按从左到右方向建模，避免双向标签堆叠）
+Y(1, 2) = 34; Y(1, 3) = 31;
+Y(2, 7) = 33;
+Y(3, 4) = 29; Y(3, 5) = 30; Y(3, 6) = 28;
+Y(4, 9) = 28;
+Y(5, 8) = 29;
+Y(6, 8) = 27; Y(6, 10) = 27;
+Y(7, 11) = 28; Y(7, 9) = 31;
+Y(8, 14) = 27;
+Y(9, 13) = 29; Y(9, 14) = 30;
+Y(10, 12) = 26;
+Y(11, 13) = 28;
+Y(12, 14) = 25;
+Y(13, 14) = 27;
 
 % ------------------------- 2) 时延矩阵 D -------------------------
 D = inf(n);
-D(1, 2) = 4; D(1, 7) = 2; D(2, 4) = 8; D(2, 8) = 4; D(3, 4) = 6;
-D(3, 5) = 4; D(3, 8) = 7; D(4, 7) = 6; D(5, 6) = 4; D(6, 7) = 3;
-D(2, 1) = 4; D(7, 1) = 2; D(4, 2) = 8; D(8, 2) = 4; D(4, 3) = 6;
-D(5, 3) = 4; D(8, 3) = 7; D(7, 4) = 6; D(6, 5) = 4; D(7, 6) = 3;
+
+D(1, 2) = 1.9; D(1, 3) = 2.1;
+D(2, 7) = 2.0;
+D(3, 4) = 2.3; D(3, 5) = 2.2; D(3, 6) = 2.4;
+D(4, 9) = 2.2;
+D(5, 8) = 2.3;
+D(6, 8) = 2.3; D(6, 10) = 2.4;
+D(7, 11) = 2.4; D(7, 9) = 2.0;
+D(8, 14) = 2.8;
+D(9, 13) = 2.3; D(9, 14) = 2.4;
+D(10, 12) = 2.3;
+D(11, 13) = 2.2;
+D(12, 14) = 2.4;
+D(13, 14) = 2.0;
 
 % ------------------------- 3) 抖动矩阵 J -------------------------
 J = inf(n);
-J(1, 2) = 1; J(1, 7) = 1; J(2, 4) = 2; J(2, 8) = 1; J(3, 4) = 3;
-J(3, 5) = 0.5; J(3, 8) = 2; J(4, 7) = 3; J(5, 6) = 3; J(6, 7) = 1;
-J(2, 1) = 1; J(7, 1) = 1; J(4, 2) = 2; J(8, 2) = 1; J(4, 3) = 3;
-J(5, 3) = 0.5; J(8, 3) = 2; J(7, 4) = 3; J(6, 5) = 3; J(7, 6) = 1;
+
+J(1, 2) = 0.70; J(1, 3) = 0.80;
+J(2, 7) = 0.75;
+J(3, 4) = 0.95; J(3, 5) = 0.90; J(3, 6) = 1.00;
+J(4, 9) = 0.90;
+J(5, 8) = 0.85;
+J(6, 8) = 0.95; J(6, 10) = 0.95;
+J(7, 11) = 1.00; J(7, 9) = 0.85;
+J(8, 14) = 1.05;
+J(9, 13) = 0.95; J(9, 14) = 0.90;
+J(10, 12) = 0.95;
+J(11, 13) = 0.90;
+J(12, 14) = 0.95;
+J(13, 14) = 0.85;
 
 % ------------------------- 4) 丢包率矩阵 Z -------------------------
 Z = inf(n);
-Z(1, 2) = 0.02; Z(1, 7) = 0.01; Z(2, 4) = 0.01; Z(2, 8) = 0.04; Z(3, 4) = 0.04;
-Z(3, 5) = 0.01; Z(3, 8) = 0.05; Z(4, 7) = 0.02; Z(5, 6) = 0.02; Z(6, 7) = 0.02;
-Z(2, 1) = 0.02; Z(7, 1) = 0.01; Z(4, 2) = 0.01; Z(8, 2) = 0.04; Z(4, 3) = 0.04;
-Z(5, 3) = 0.01; Z(8, 3) = 0.05; Z(7, 4) = 0.02; Z(6, 5) = 0.02; Z(7, 6) = 0.02;
+
+Z(1, 2) = 0.008; Z(1, 3) = 0.010;
+Z(2, 7) = 0.009;
+Z(3, 4) = 0.013; Z(3, 5) = 0.011; Z(3, 6) = 0.014;
+Z(4, 9) = 0.012;
+Z(5, 8) = 0.011;
+Z(6, 8) = 0.013; Z(6, 10) = 0.014;
+Z(7, 11) = 0.014; Z(7, 9) = 0.010;
+Z(8, 14) = 0.015;
+Z(9, 13) = 0.012; Z(9, 14) = 0.011;
+Z(10, 12) = 0.013;
+Z(11, 13) = 0.012;
+Z(12, 14) = 0.014;
+Z(13, 14) = 0.010;
 
 % ------------------------- 5) 节点与链路状态 -------------------------
 % 节点存活向量：1 表示节点正常，0 表示节点失效
@@ -187,10 +251,10 @@ trust(1:n+1:end) = 1;
 
 % 正常场景下允许存在轻微背景风险，但不影响整体正常性
 % 这里将备用路径上的若干链路设置为轻微风险背景
-trust(2, 8) = 0.98;
-trust(8, 2) = 0.98;
-trust(8, 3) = 0.96;
-trust(3, 8) = 0.96;
+trust(3, 6) = 0.97;
+trust(6, 10) = 0.96;
+trust(9, 13) = 0.97;
+trust(8, 14) = 0.96;
 
 % 数值安全参数：防止 log(1 - Z_eff) 出现 log(0)
 eps_z = 1e-6;
@@ -299,14 +363,15 @@ scenarios(1).notes = '作为恢复评价的基准场景。';
 %% ========================= S1 节点失效场景 =========================
 net1 = base_net;
 
-% 节点 4 失效，同时使与节点 4 相连的链路失效
-failed_node = 4;
+% 节点 7 失效，同时使与节点 7 相连的链路失效
+% 该故障会切断上方主通道，通常触发中下方通道重路由
+failed_node = 7;
 net1.node_alive(failed_node) = false;
 net1.link_alive(failed_node, :) = false;
 net1.link_alive(:, failed_node) = false;
 
 scenarios(2).name = 'S1';
-scenarios(2).description = '节点失效场景：节点 4 失效，与节点 4 相连的链路同步失效，不额外加入链路退化与风险惩罚。';
+scenarios(2).description = '节点失效场景：节点 7 失效，与节点 7 相连链路同步失效，不额外加入链路退化与风险惩罚。';
 scenarios(2).net = net1;
 scenarios(2).need_recovery = true;
 scenarios(2).notes = '用于体现单点节点失效后，算法是否能够完成可行重路由。';
@@ -314,20 +379,14 @@ scenarios(2).notes = '用于体现单点节点失效后，算法是否能够完�
 %% ========================= S2 链路退化场景 =========================
 net2 = base_net;
 
-% 对 2->8 和 8->3 两段链路施加退化
-net2.degY(2, 8) = 0.10;
-net2.degD(2, 8) = 0.25;
-net2.degJ(2, 8) = 0.30;
-net2.degZ(2, 8) = 0.01;
-
-net2.degY(8, 3) = 0.08;
-net2.degD(8, 3) = 0.20;
-net2.degJ(8, 3) = 0.20;
-net2.degZ(8, 3) = 0.01;
+% 对中路通道 3->5->8->14 施加退化，驱动切换到 3->6->10->12->14
+net2.degY(3, 5) = 0.26; net2.degD(3, 5) = 0.30; net2.degJ(3, 5) = 0.35; net2.degZ(3, 5) = 0.020;
+net2.degY(5, 8) = 0.24; net2.degD(5, 8) = 0.28; net2.degJ(5, 8) = 0.30; net2.degZ(5, 8) = 0.015;
+net2.degY(8, 14) = 0.20; net2.degD(8, 14) = 0.25; net2.degJ(8, 14) = 0.28; net2.degZ(8, 14) = 0.012;
 
 % 本场景信任保持不变
 scenarios(3).name = 'S2';
-scenarios(3).description = '链路退化场景：节点均正常，仅对 2->8 和 8->3 施加带宽下降、时延增加、抖动增加和轻微丢包增加。';
+scenarios(3).description = '链路退化场景：节点均正常，仅对中路通道 3->5->8->14 关键链路施加退化。';
 scenarios(3).net = net2;
 scenarios(3).need_recovery = true;
 scenarios(3).notes = '用于体现路径候选集中的某些链路性能退化后，最终路径与 QoS 指标的变化。';
@@ -337,20 +396,15 @@ net3 = base_net;
 
 % 节点和链路均可用，但设置风险链路
 % 场景目标：体现“风险惩罚导致路径规避”
-net3.trust(7, 4) = 0.30;
-net3.trust(4, 7) = 0.30;
-net3.trust(4, 3) = 0.35;
-net3.trust(3, 4) = 0.35;
-net3.trust(8, 3) = 0.88;
-net3.trust(3, 8) = 0.88;
+% 将 7->9->14 风险显著提高，促使路径转向 7->11->13->14
+net3.trust(7, 9) = 0.35;
+net3.trust(9, 14) = 0.32;
+net3.trust(9, 13) = 0.55;
 
 % 可选叠加轻微 degZ，体现风险链路并非完全失效，而是具有更高的不确定性
-net3.degZ(7, 4) = 0.010;
-net3.degZ(4, 7) = 0.010;
-net3.degZ(4, 3) = 0.015;
-net3.degZ(3, 4) = 0.015;
-net3.degZ(8, 3) = 0.008;
-net3.degZ(3, 8) = 0.008;
+net3.degZ(7, 9) = 0.015;
+net3.degZ(9, 14) = 0.018;
+net3.degZ(9, 13) = 0.010;
 
 scenarios(4).name = 'S3';
 scenarios(4).description = '风险链路场景：节点与链路仍可用，但若干链路 trust 降低，并叠加轻微 degZ，以体现风险惩罚导致的路径规避。';
@@ -361,28 +415,23 @@ scenarios(4).notes = '该场景的重点不是链路物理失效，而是路径�
 %% ========================= S4 组合异常场景 =========================
 net4 = base_net;
 
-% 节点 4 失效
-net4.node_alive(4) = false;
-net4.link_alive(4, :) = false;
-net4.link_alive(:, 4) = false;
+% 节点 8 失效（中间汇聚节点失效）
+net4.node_alive(8) = false;
+net4.link_alive(8, :) = false;
+net4.link_alive(:, 8) = false;
 
-% 同时对替代路径 2->8、8->3 加入退化
-net4.degY(2, 8) = 0.10;
-net4.degD(2, 8) = 0.25;
-net4.degJ(2, 8) = 0.30;
-net4.degZ(2, 8) = 0.01;
+% 叠加上方关键链路退化，迫使路径走 1->3->4->9->13->14 等备选
+net4.degY(2, 7) = 0.20; net4.degD(2, 7) = 0.28; net4.degJ(2, 7) = 0.30; net4.degZ(2, 7) = 0.016;
+net4.degY(7, 9) = 0.22; net4.degD(7, 9) = 0.30; net4.degJ(7, 9) = 0.32; net4.degZ(7, 9) = 0.018;
+net4.degY(9, 14) = 0.18; net4.degD(9, 14) = 0.24; net4.degJ(9, 14) = 0.26; net4.degZ(9, 14) = 0.015;
 
-net4.degY(8, 3) = 0.08;
-net4.degD(8, 3) = 0.20;
-net4.degJ(8, 3) = 0.20;
-net4.degZ(8, 3) = 0.01;
-
-% 并设置略低 trust
-net4.trust(2, 8) = 0.92;
-net4.trust(8, 3) = 0.88;
+% 对上方路径继续施加风险惩罚
+net4.trust(2, 7) = 0.78;
+net4.trust(7, 9) = 0.74;
+net4.trust(9, 14) = 0.76;
 
 scenarios(5).name = 'S4';
-scenarios(5).description = '组合异常场景：节点 4 失效，同时对替代路径 2->8、8->3 加入退化，并赋予略低 trust。';
+scenarios(5).description = '组合异常场景：节点 8 失效，同时对上方主链路施加退化与风险惩罚。';
 scenarios(5).net = net4;
 scenarios(5).need_recovery = true;
 scenarios(5).notes = '用于体现“异常后重路由 + 风险/退化共存”的复合网络状态。';
@@ -491,14 +540,12 @@ while ~isempty(Q)
         break;
     end
 
-    % 遍历 u 的所有后继节点
-    for v = 1:n
+    % 遍历 u 的所有可存在后继节点（避免对不存在链路做无效扫描）
+    neighbors = find(net.link_exist(u, :));
+    for idx_nb = 1:numel(neighbors)
+        v = neighbors(idx_nb);
         % ---------- 可达性与状态检查 ----------
         if u == v
-            continue;
-        end
-
-        if ~net.link_exist(u, v)
             continue;
         end
 
@@ -520,16 +567,7 @@ while ~isempty(Q)
         % D_eff = D * (1 + degD)
         % J_eff = J * (1 + degJ)
         % Z_eff = min(1 - eps_z, Z + degZ)
-        Y_eff = net.Y(u, v) * (1 - net.degY(u, v));
-        D_eff = net.D(u, v) * (1 + net.degD(u, v));
-        J_eff = net.J(u, v) * (1 + net.degJ(u, v));
-        Z_eff = min(1 - net.eps_z, net.Z(u, v) + net.degZ(u, v));
-
-        % 对极端非法值进行保护
-        Y_eff = max(0, Y_eff);
-        D_eff = max(0, D_eff);
-        J_eff = max(0, J_eff);
-        Z_eff = max(0, min(1 - net.eps_z, Z_eff));
+        [Y_eff, D_eff, J_eff, Z_eff] = compute_effective_link_values(net, u, v);
 
         % 将丢包率转为成功率对数项
         X_eff = log(1 - Z_eff);
@@ -725,7 +763,10 @@ if isnan(prev(t))
 end
 
 u = t;
-path = u;
+path_rev = nan(1, numel(prev));
+cnt = 0;
+path_rev(1) = u;
+cnt = 1;
 
 while u ~= s
     u = prev(u);
@@ -735,7 +776,300 @@ while u ~= s
         return;
     end
 
-    path = [u, path]; %#ok<AGROW>
+    cnt = cnt + 1;
+    path_rev(cnt) = u;
+end
+
+path = fliplr(path_rev(1:cnt));
+
+end
+
+%% ========================================================================
+function print_tcalc_diagnostics(scenario, old_path, result_scene, params)
+% 打印 T_calc 细化诊断（仅命令行）
+% 输出信息包括：
+% 1) 旧路径逐跳探测在何处失败及耗时；
+% 2) 重路由算法求解耗时（即 result_scene.calc_time）；
+% 3) 若干可行候选路径代价对比与最终最优路径说明。
+
+fprintf('\n');
+fprintf('-------------------- T_calc 诊断：%s --------------------\n', scenario.name);
+probe = struct('T_probe', 0, 'status_text', '未执行');
+
+if isempty(old_path)
+    fprintf('S0 基准旧路径为空，跳过旧路径探测。\n');
+else
+    probe = probe_old_path_until_break(old_path, scenario.net, params);
+    fprintf('旧路径：%s\n', path_to_str(old_path));
+    fprintf('旧路径探测耗时 T_probe：%.6f 秒\n', probe.T_probe);
+    fprintf('旧路径探测结论：%s\n', probe.status_text);
+end
+
+fprintf('重路由计算耗时 T_reroute（算法实测）：%.6f 秒\n', result_scene.calc_time);
+fprintf('细化对比：T_probe + T_reroute = %.6f 秒\n', probe.T_probe + result_scene.calc_time);
+
+% 候选路径代价对比（仅用于说明“为什么选中当前最优路径”）
+all_paths = enumerate_simple_paths(scenario.net, scenario.net.s, scenario.net.t, 8, 80);
+cmp = build_candidate_cost_table(all_paths, scenario.net, params);
+
+if isempty(cmp)
+    fprintf('候选路径对比：当前场景无可行候选路径。\n');
+else
+    [~, idx_sort] = sort([cmp.total_cost], 'ascend');
+    cmp = cmp(idx_sort);
+
+    topN = min(3, numel(cmp));
+    fprintf('候选路径代价对比（前 %d 条）：\n', topN);
+    for i = 1:topN
+        fprintf('  #%d 路径=%s | cost=%.6f | bw=%.3f | delay=%.3f | jitter=%.3f | succ=%.6f\n', ...
+            i, cmp(i).path_str, cmp(i).total_cost, cmp(i).bandwidth, ...
+            cmp(i).delay, cmp(i).jitter, cmp(i).success_prob);
+    end
+
+    selected_str = path_to_str(result_scene.path);
+    fprintf('算法选中路径：%s\n', selected_str);
+    if strcmp(selected_str, cmp(1).path_str)
+        fprintf('结论：算法选中路径与候选集中最低代价路径一致。\n');
+    else
+        fprintf('结论：算法选中路径与候选最低代价路径不一致（需进一步排查参数/约束）。\n');
+    end
+end
+
+fprintf('---------------------------------------------------------------\n');
+
+end
+
+%% ========================================================================
+function probe = probe_old_path_until_break(path, net, params)
+% 逐跳探测旧路径在当前场景中的可通行性
+% 仅用于命令行诊断，不影响算法求解与结果结构体
+
+probe = struct();
+probe.T_probe = 0;
+probe.status_text = '未执行';
+
+if isempty(path) || numel(path) < 2
+    probe.status_text = '旧路径长度不足，无需探测';
+    return;
+end
+
+accum_Y = inf;
+accum_D = 0;
+accum_J = 0;
+accum_X = 0;
+
+t_probe = tic;
+
+for k = 1:(numel(path) - 1)
+    u = path(k);
+    v = path(k + 1);
+    t_hop = tic;
+
+    if ~net.node_alive(u)
+        probe.T_probe = toc(t_probe);
+        probe.status_text = sprintf('在旧路径节点 %d 处发现节点失效；该跳检查耗时 %.6f 秒', u, toc(t_hop));
+        return;
+    end
+
+    if ~net.node_alive(v)
+        probe.T_probe = toc(t_probe);
+        probe.status_text = sprintf('在旧路径下一跳节点 %d 处发现节点失效；该跳检查耗时 %.6f 秒', v, toc(t_hop));
+        return;
+    end
+
+    if ~net.link_exist(u, v)
+        probe.T_probe = toc(t_probe);
+        probe.status_text = sprintf('在边 %d->%d 处发现链路不存在；该跳检查耗时 %.6f 秒', u, v, toc(t_hop));
+        return;
+    end
+
+    if ~net.link_alive(u, v)
+        probe.T_probe = toc(t_probe);
+        probe.status_text = sprintf('在边 %d->%d 处发现链路失效；该跳检查耗时 %.6f 秒', u, v, toc(t_hop));
+        return;
+    end
+
+    [Y_eff, D_eff, J_eff, Z_eff] = compute_effective_link_values(net, u, v);
+
+    accum_Y = min(accum_Y, Y_eff);
+    accum_D = accum_D + D_eff;
+    accum_J = accum_J + J_eff;
+    accum_X = accum_X + log(1 - Z_eff);
+
+    if accum_Y < params.y_min
+        probe.T_probe = toc(t_probe);
+        probe.status_text = sprintf('在边 %d->%d 后触发带宽约束失败；该跳检查耗时 %.6f 秒', u, v, toc(t_hop));
+        return;
+    end
+    if accum_D > params.d_max
+        probe.T_probe = toc(t_probe);
+        probe.status_text = sprintf('在边 %d->%d 后触发时延约束失败；该跳检查耗时 %.6f 秒', u, v, toc(t_hop));
+        return;
+    end
+    if accum_J > params.j_max
+        probe.T_probe = toc(t_probe);
+        probe.status_text = sprintf('在边 %d->%d 后触发抖动约束失败；该跳检查耗时 %.6f 秒', u, v, toc(t_hop));
+        return;
+    end
+    if accum_X < params.x_min
+        probe.T_probe = toc(t_probe);
+        probe.status_text = sprintf('在边 %d->%d 后触发成功率约束失败；该跳检查耗时 %.6f 秒', u, v, toc(t_hop));
+        return;
+    end
+end
+
+probe.T_probe = toc(t_probe);
+probe.status_text = sprintf('旧路径在当前场景仍可行；完整探测耗时 %.6f 秒', probe.T_probe);
+
+end
+
+%% ========================================================================
+function cmp = build_candidate_cost_table(paths, net, params)
+% 评估候选路径代价，返回可行路径对比表（结构体数组）
+
+cmp = struct('path', {}, 'path_str', {}, 'total_cost', {}, ...
+             'bandwidth', {}, 'delay', {}, 'jitter', {}, 'success_prob', {});
+
+for i = 1:numel(paths)
+    eval_res = evaluate_path_cost(paths{i}, net, params);
+    if ~eval_res.feasible
+        continue;
+    end
+
+    item = struct();
+    item.path = paths{i};
+    item.path_str = path_to_str(paths{i});
+    item.total_cost = eval_res.total_cost;
+    item.bandwidth = eval_res.bandwidth;
+    item.delay = eval_res.delay;
+    item.jitter = eval_res.jitter;
+    item.success_prob = eval_res.success_prob;
+
+    cmp(end + 1) = item; %#ok<AGROW>
+end
+
+end
+
+%% ========================================================================
+function eval_res = evaluate_path_cost(path, net, params)
+% 评估给定路径在当前网络下的可行性与总代价
+
+eval_res = struct();
+eval_res.feasible = false;
+eval_res.total_cost = inf;
+eval_res.bandwidth = NaN;
+eval_res.delay = NaN;
+eval_res.jitter = NaN;
+eval_res.success_prob = NaN;
+
+if isempty(path) || numel(path) < 2
+    return;
+end
+
+accum_Y = inf;
+accum_D = 0;
+accum_J = 0;
+accum_X = 0;
+accum_T = 1;
+
+for k = 1:(numel(path) - 1)
+    u = path(k);
+    v = path(k + 1);
+
+    if ~net.node_alive(u) || ~net.node_alive(v)
+        return;
+    end
+    if ~net.link_exist(u, v) || ~net.link_alive(u, v)
+        return;
+    end
+
+    [Y_eff, D_eff, J_eff, Z_eff] = compute_effective_link_values(net, u, v);
+    accum_Y = min(accum_Y, Y_eff);
+    accum_D = accum_D + D_eff;
+    accum_J = accum_J + J_eff;
+    accum_X = accum_X + log(1 - Z_eff);
+    accum_T = min(accum_T, net.trust(u, v));
+
+    if accum_Y < params.y_min || accum_D > params.d_max || ...
+       accum_J > params.j_max || accum_X < params.x_min
+        return;
+    end
+end
+
+risk_penalty = -log(max(accum_T, params.eps_t));
+total_cost = params.w_y * (accum_Y / params.y_min) + ...
+             params.w_d * (accum_D / params.d_max) + ...
+             params.w_j * (accum_J / params.j_max) + ...
+             params.w_x * (accum_X / params.x_min) + ...
+             params.w_t * risk_penalty;
+
+eval_res.feasible = true;
+eval_res.total_cost = total_cost;
+eval_res.bandwidth = accum_Y;
+eval_res.delay = accum_D;
+eval_res.jitter = accum_J;
+eval_res.success_prob = exp(accum_X);
+
+end
+
+%% ========================================================================
+function paths = enumerate_simple_paths(net, s, t, max_depth, max_paths)
+% 枚举从 s 到 t 的简单路径（深度受限，数量受限）
+
+if nargin < 4
+    max_depth = 8;
+end
+if nargin < 5
+    max_paths = 80;
+end
+
+paths = {};
+if ~net.node_alive(s) || ~net.node_alive(t)
+    return;
+end
+
+visited = false(1, net.n);
+visited(s) = true;
+[paths, ~] = dfs_collect_paths(net, s, t, visited, s, paths, max_depth, max_paths);
+
+end
+
+%% ========================================================================
+function [paths, stop_flag] = dfs_collect_paths(net, u, t, visited, curr_path, paths, max_depth, max_paths)
+% 深度优先收集简单路径
+
+stop_flag = false;
+
+if numel(paths) >= max_paths
+    stop_flag = true;
+    return;
+end
+
+if u == t
+    paths{end + 1} = curr_path; %#ok<AGROW>
+    if numel(paths) >= max_paths
+        stop_flag = true;
+    end
+    return;
+end
+
+if numel(curr_path) >= max_depth
+    return;
+end
+
+neighbors = find(net.link_exist(u, :) & net.link_alive(u, :) & net.node_alive);
+for idx = 1:numel(neighbors)
+    v = neighbors(idx);
+    if visited(v)
+        continue;
+    end
+
+    visited2 = visited;
+    visited2(v) = true;
+    [paths, stop_flag] = dfs_collect_paths(net, v, t, visited2, [curr_path, v], paths, max_depth, max_paths); %#ok<AGROW>
+    if stop_flag
+        return;
+    end
 end
 
 end
@@ -913,16 +1247,23 @@ function pos = build_node_positions()
 % 手工固定节点坐标
 % 采用论文拓扑示意图风格，避免自动布局导致的随机性和重复运行差异。
 
-pos = zeros(8, 2);
+pos = zeros(14, 2);
 
-pos(1, :) = [0.0, 4.0];
-pos(2, :) = [2.6, 5.8];
-pos(7, :) = [2.6, 2.2];
-pos(4, :) = [5.1, 4.0];
-pos(8, :) = [5.0, 6.9];
-pos(6, :) = [5.0, 1.0];
-pos(3, :) = [8.3, 5.4];
-pos(5, :) = [8.3, 2.3];
+% 按用户示意图重排节点位置
+pos(1, :)  = [0.0, 4.0];
+pos(2, :)  = [2.0, 5.5];
+pos(3, :)  = [2.0, 2.5];
+pos(4, :)  = [4.2, 4.8];
+pos(5, :)  = [4.2, 3.0];
+pos(6, :)  = [4.2, 1.2];
+pos(7, :)  = [4.2, 7.0];
+pos(8, :)  = [6.8, 3.0];
+pos(9, :)  = [6.8, 4.8];
+pos(10, :) = [6.8, 1.2];
+pos(11, :) = [6.8, 7.0];
+pos(12, :) = [8.8, 2.5];
+pos(13, :) = [8.8, 5.5];
+pos(14, :) = [10.8, 4.0];
 
 end
 
@@ -944,7 +1285,7 @@ viz.right_axes_position  = [0.68, 0.08, 0.29, 0.84];
 viz.node_size            = 1300;
 viz.node_radius          = 0.30;
 viz.node_font_size       = 11;
-viz.edge_font_size       = 7.5;
+viz.edge_font_size       = 6.8;
 viz.panel_title_size     = 12;
 viz.panel_font_size      = 10;
 
@@ -961,7 +1302,7 @@ viz.node_dead_color      = [0.72, 0.72, 0.72];
 viz.node_edge_color      = [0.00, 0.00, 0.00];
 
 viz.label_box_color      = [1.00, 1.00, 1.00];
-viz.edge_label_offset    = 0.22;
+viz.edge_label_offset    = 0.30;
 
 % ------------------------- 右侧面板风格 -------------------------
 viz.panel_line_step      = 0.058;
@@ -982,6 +1323,281 @@ viz = build_visual_config();
 
 for k = 1:numel(scenarios)
     render_scenario_figure(base_net, scenarios(k), results(k), params, pos, viz, k);
+end
+
+end
+
+%% ========================================================================
+function render_extra_topology_figures(base_net, scenarios, results)
+% 额外绘图：
+% 1) 网络节点关系示意图（无链路参数）；
+% 2) S0 预查路拓扑图（保留链路参数，不显示右侧面板，不高亮路径）；
+% 3) S0~S4 特殊参数拓扑图（仅显示场景差异参数，不显示右侧面板）。
+
+pos = build_node_positions();
+viz = build_visual_config();
+
+render_plain_topology_figure(base_net, pos, viz);
+render_s0_presearch_figure(base_net, pos, viz);
+
+for k = 1:numel(scenarios)
+    render_special_only_figure(base_net, scenarios(k), results(k), pos, viz, k);
+end
+
+end
+
+%% ========================================================================
+function render_s0_presearch_figure(base_net, pos, viz)
+% S0 场景单独窗口（预查路形态）
+% 要求：
+% - 保留链路参数标签（Y,D,J,Z）；
+% - 不显示右侧参数面板；
+% - 不显示路径高亮（即“未进行路径查找后的观感”）。
+
+fig = figure('Color', 'w', ...
+    'Name', 'S0 预查路网络示意图（含链路参数）', ...
+    'NumberTitle', 'off', ...
+    'Position', [145, 95, 1080, 760]);
+
+ax = axes('Parent', fig, 'Position', [0.05, 0.06, 0.90, 0.88]);
+hold(ax, 'on');
+axis(ax, 'equal');
+axis(ax, 'off');
+
+xlim(ax, [min(pos(:, 1)) - 1.3, max(pos(:, 1)) + 1.3]);
+ylim(ax, [min(pos(:, 2)) - 1.3, max(pos(:, 2)) + 1.3]);
+
+empty_result = init_empty_result_struct(); % 无路径高亮
+draw_network_edges(ax, base_net, empty_result, pos, viz, false);
+draw_network_nodes(ax, base_net, pos, viz);
+
+title(ax, 'S0 预查路网络示意图（仅拓扑+链路参数）', 'FontWeight', 'bold');
+
+text(ax, min(pos(:, 1)) - 1.1, min(pos(:, 2)) - 1.05, ...
+    '边标签：原始参数 Y, D, J, Z（未高亮路径）', ...
+    'FontSize', 9, ...
+    'Interpreter', 'none');
+
+end
+
+%% ========================================================================
+function render_plain_topology_figure(net, pos, viz)
+% 纯关系图：仅显示节点与连接关系，不显示链路参数
+
+fig = figure('Color', 'w', ...
+    'Name', '网络节点关系示意图（无链路参数）', ...
+    'NumberTitle', 'off', ...
+    'Position', [120, 80, 980, 700]);
+
+ax = axes('Parent', fig, 'Position', [0.05, 0.06, 0.90, 0.88]);
+hold(ax, 'on');
+axis(ax, 'equal');
+axis(ax, 'off');
+
+xlim(ax, [min(pos(:, 1)) - 1.3, max(pos(:, 1)) + 1.3]);
+ylim(ax, [min(pos(:, 2)) - 1.3, max(pos(:, 2)) + 1.3]);
+
+draw_topology_edges_without_labels(ax, net, pos, viz);
+draw_network_nodes(ax, net, pos, viz);
+
+title(ax, '网络节点关系示意图（仅节点编号与连接关系）', 'FontWeight', 'bold');
+
+end
+
+%% ========================================================================
+function render_special_only_figure(base_net, scenario, result, pos, viz, idx)
+% 特殊参数拓扑图：只显示场景特殊参数，不显示右侧面板
+
+fig_name = sprintf('%s 特殊参数拓扑图', scenario.name);
+fig = figure('Color', 'w', ...
+    'Name', fig_name, ...
+    'NumberTitle', 'off', ...
+    'Position', [160 + idx * 30, 95 + idx * 20, 1100, 760]);
+
+ax = axes('Parent', fig, 'Position', [0.05, 0.06, 0.90, 0.88]);
+hold(ax, 'on');
+axis(ax, 'equal');
+axis(ax, 'off');
+
+xlim(ax, [min(pos(:, 1)) - 1.3, max(pos(:, 1)) + 1.3]);
+ylim(ax, [min(pos(:, 2)) - 1.3, max(pos(:, 2)) + 1.3]);
+
+draw_topology_edges_without_labels(ax, scenario.net, pos, viz);
+draw_special_edge_labels(ax, base_net, scenario.net, pos, viz);
+draw_network_nodes(ax, scenario.net, pos, viz);
+
+if ~isempty(result.path)
+    highlight_path_edges(ax, result.path, pos, viz);
+end
+
+title(ax, sprintf('%s：仅显示场景特殊参数', get_scenario_title(scenario.name)), 'FontWeight', 'bold');
+
+end
+
+%% ========================================================================
+function draw_topology_edges_without_labels(ax, net, pos, viz)
+% 绘制不带参数标签的拓扑边
+
+n = net.n;
+for i = 1:n
+    for j = 1:n
+        if i == j || ~net.link_exist(i, j)
+            continue;
+        end
+
+        p1 = pos(i, :);
+        p2 = pos(j, :);
+        vec = p2 - p1;
+        len = norm(vec);
+        if len <= eps
+            continue;
+        end
+
+        dir_vec = vec / len;
+        p1s = p1 + dir_vec * viz.node_radius;
+        p2s = p2 - dir_vec * viz.node_radius;
+
+        edge_alive = net.link_alive(i, j) && net.node_alive(i) && net.node_alive(j);
+        if edge_alive
+            edge_color = [0.15, 0.15, 0.15];
+            edge_style = '-';
+            edge_w = viz.base_line_width;
+        else
+            edge_color = viz.failed_edge_color;
+            edge_style = '--';
+            edge_w = viz.failed_line_width;
+        end
+
+        line(ax, [p1s(1), p2s(1)], [p1s(2), p2s(2)], ...
+            'LineStyle', edge_style, 'LineWidth', edge_w, 'Color', edge_color);
+    end
+end
+
+end
+
+%% ========================================================================
+function draw_special_edge_labels(ax, base_net, scene_net, pos, viz)
+% 仅绘制场景相对于基准网络的“特殊参数”标签
+
+n = scene_net.n;
+for i = 1:n
+    for j = 1:n
+        if i == j || ~scene_net.link_exist(i, j)
+            continue;
+        end
+
+        [is_special, label_str, label_color] = build_special_label(base_net, scene_net, i, j);
+        if ~is_special
+            continue;
+        end
+
+        p1 = pos(i, :);
+        p2 = pos(j, :);
+        vec = p2 - p1;
+        len = norm(vec);
+        if len <= eps
+            continue;
+        end
+
+        dir_vec = vec / len;
+        perp_vec = [-dir_vec(2), dir_vec(1)];
+        mid = (p1 + p2) / 2;
+
+        if i < j
+            offset_sign = 1;
+        else
+            offset_sign = -1;
+        end
+
+        offset_mag = viz.edge_label_offset * 1.45 * (1 + 0.12 * mod(i + 2 * j, 3));
+        x_label = mid(1) + offset_sign * offset_mag * perp_vec(1);
+        y_label = mid(2) + offset_sign * offset_mag * perp_vec(2);
+
+        text(ax, x_label, y_label, label_str, ...
+            'FontSize', max(6.2, viz.edge_font_size - 0.1), ...
+            'Color', label_color, ...
+            'HorizontalAlignment', 'center', ...
+            'VerticalAlignment', 'middle', ...
+            'BackgroundColor', [1, 1, 1], ...
+            'Interpreter', 'none');
+    end
+end
+
+end
+
+%% ========================================================================
+function [is_special, label_str, label_color] = build_special_label(base_net, scene_net, i, j)
+% 构造“特殊参数”标签：仅输出与 S0 基准相比发生变化的参数
+
+is_special = false;
+label_str = '';
+label_color = [0.00, 0.00, 0.00];
+
+parts = {};
+
+if base_net.link_alive(i, j) && ~scene_net.link_alive(i, j)
+    parts{end + 1} = '失效'; %#ok<AGROW>
+    label_color = [0.55, 0.00, 0.00];
+end
+
+if scene_net.degY(i, j) ~= 0
+    parts{end + 1} = sprintf('degY=%.2f', scene_net.degY(i, j)); %#ok<AGROW>
+end
+if scene_net.degD(i, j) ~= 0
+    parts{end + 1} = sprintf('degD=%.2f', scene_net.degD(i, j)); %#ok<AGROW>
+end
+if scene_net.degJ(i, j) ~= 0
+    parts{end + 1} = sprintf('degJ=%.2f', scene_net.degJ(i, j)); %#ok<AGROW>
+end
+if scene_net.degZ(i, j) ~= 0
+    parts{end + 1} = sprintf('degZ=%.3f', scene_net.degZ(i, j)); %#ok<AGROW>
+end
+
+if abs(scene_net.trust(i, j) - base_net.trust(i, j)) > 1e-12
+    parts{end + 1} = sprintf('trust=%.2f', scene_net.trust(i, j)); %#ok<AGROW>
+    if all(label_color == 0)
+        label_color = [0.00, 0.20, 0.55];
+    end
+end
+
+if ~isempty(parts)
+    is_special = true;
+    label_str = sprintf('%d->%d\n%s', i, j, strjoin(parts, ', '));
+    if all(label_color == 0)
+        label_color = [0.00, 0.00, 0.00];
+    end
+end
+
+end
+
+%% ========================================================================
+function highlight_path_edges(ax, path, pos, viz)
+% 在拓扑图上高亮最终路径
+
+if isempty(path) || numel(path) < 2
+    return;
+end
+
+for k = 1:(numel(path) - 1)
+    i = path(k);
+    j = path(k + 1);
+
+    p1 = pos(i, :);
+    p2 = pos(j, :);
+    vec = p2 - p1;
+    len = norm(vec);
+    if len <= eps
+        continue;
+    end
+
+    dir_vec = vec / len;
+    p1s = p1 + dir_vec * viz.node_radius;
+    p2s = p2 - dir_vec * viz.node_radius;
+
+    line(ax, [p1s(1), p2s(1)], [p1s(2), p2s(2)], ...
+        'LineStyle', '-', ...
+        'LineWidth', viz.path_line_width, ...
+        'Color', viz.path_edge_color);
 end
 
 end
@@ -1144,8 +1760,10 @@ for i = 1:n
             offset_sign = -1;
         end
 
-        x_label = mid(1) + offset_sign * viz.edge_label_offset * perp_vec(1);
-        y_label = mid(2) + offset_sign * viz.edge_label_offset * perp_vec(2);
+        % 使用轻微的确定性偏移扰动，降低局部密集区域标签堆叠
+        offset_mag = viz.edge_label_offset * (1 + 0.18 * mod(i + j, 3));
+        x_label = mid(1) + offset_sign * offset_mag * perp_vec(1);
+        y_label = mid(2) + offset_sign * offset_mag * perp_vec(2);
 
         label_str = format_edge_label(net, i, j, show_effective);
 
@@ -1355,10 +1973,8 @@ if ~link_info.is_alive
     return;
 end
 
-link_info.Yeff = max(0, net.Y(i, j) * (1 - net.degY(i, j)));
-link_info.Deff = max(0, net.D(i, j) * (1 + net.degD(i, j)));
-link_info.Jeff = max(0, net.J(i, j) * (1 + net.degJ(i, j)));
-link_info.Zeff = max(0, min(1 - net.eps_z, net.Z(i, j) + net.degZ(i, j)));
+[link_info.Yeff, link_info.Deff, link_info.Jeff, link_info.Zeff] = ...
+    compute_effective_link_values(net, i, j);
 
 end
 
@@ -1437,10 +2053,21 @@ if isempty(path)
     return;
 end
 
-s = num2str(path(1));
-for k = 2:numel(path)
-    s = [s, ' -> ', num2str(path(k))]; %#ok<AGROW>
+parts = arrayfun(@num2str, path, 'UniformOutput', false);
+s = strjoin(parts, ' -> ');
+
 end
+
+%% ========================================================================
+function [Y_eff, D_eff, J_eff, Z_eff] = compute_effective_link_values(net, i, j)
+% 统一计算链路有效参数，并进行数值安全裁剪
+
+Y_eff = max(0, net.Y(i, j) * (1 - net.degY(i, j)));
+D_eff = max(0, net.D(i, j) * (1 + net.degD(i, j)));
+J_eff = max(0, net.J(i, j) * (1 + net.degJ(i, j)));
+
+Z_raw = net.Z(i, j) + net.degZ(i, j);
+Z_eff = max(0, min(1 - net.eps_z, Z_raw));
 
 end
 
